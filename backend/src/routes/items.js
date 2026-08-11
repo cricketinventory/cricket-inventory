@@ -1,14 +1,16 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 router.use(requireAuth);
 
-function logHistory(itemId, userId, action, details) {
-  db.prepare(
-    'INSERT INTO item_history (item_id, user_id, action, details) VALUES (?, ?, ?, ?)'
-  ).run(itemId, userId, action, details || null);
+async function logHistory(itemId, userId, action, details) {
+  await db.run(
+    'INSERT INTO item_history (item_id, user_id, action, details) VALUES (?, ?, ?, ?)',
+    [itemId, userId, action, details || null]
+  );
 }
 
 // Determine which user's inventory to operate on.
@@ -23,7 +25,7 @@ function targetUserId(req) {
 }
 
 // List items for the target inventory
-router.get('/', (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const uid = targetUserId(req);
   const { status } = req.query;
   let query = 'SELECT * FROM items WHERE user_id = ?';
@@ -33,54 +35,65 @@ router.get('/', (req, res) => {
     params.push(status);
   }
   query += ' ORDER BY updated_at DESC';
-  const items = db.prepare(query).all(...params);
+  const items = await db.all(query, params);
   res.json({ items });
-});
+}));
 
 // Admin-only: list items across ALL users at once
-router.get('/all', (req, res) => {
+router.get('/all', asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-  const items = db
-    .prepare(
-      `SELECT items.*, users.username, users.display_name
-       FROM items JOIN users ON users.id = items.user_id
-       ORDER BY items.updated_at DESC`
-    )
-    .all();
+  const items = await db.all(
+    `SELECT items.*, users.username, users.display_name
+     FROM items JOIN users ON users.id = items.user_id
+     ORDER BY items.updated_at DESC`
+  );
   res.json({ items });
-});
+}));
+
+// Get full history for the target inventory
+// (declared before /:id routes so "history" isn't captured as an :id param)
+router.get('/history/all', asyncHandler(async (req, res) => {
+  const uid = targetUserId(req);
+  const history = await db.all(
+    `SELECT item_history.*, items.name as item_name
+     FROM item_history JOIN items ON items.id = item_history.item_id
+     WHERE item_history.user_id = ?
+     ORDER BY item_history.created_at DESC`,
+    [uid]
+  );
+  res.json({ history });
+}));
 
 // Get a single item (must belong to target inventory)
-router.get('/:id', (req, res) => {
+router.get('/:id', asyncHandler(async (req, res) => {
   const uid = targetUserId(req);
-  const item = db.prepare('SELECT * FROM items WHERE id = ? AND user_id = ?').get(req.params.id, uid);
+  const item = await db.get('SELECT * FROM items WHERE id = ? AND user_id = ?', [req.params.id, uid]);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   res.json({ item });
-});
+}));
 
 // Create item
-router.post('/', (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const uid = targetUserId(req);
   const { name, category, status, quantity, price, notes } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   const finalStatus = status || 'have';
-  const info = db
-    .prepare(
-      `INSERT INTO items (user_id, name, category, status, quantity, price, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(uid, name, category || null, finalStatus, quantity ?? 1, price ?? null, notes || null);
+  const info = await db.run(
+    `INSERT INTO items (user_id, name, category, status, quantity, price, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [uid, name, category || null, finalStatus, quantity ?? 1, price ?? null, notes || null]
+  );
 
-  logHistory(info.lastInsertRowid, uid, 'created', `Added "${name}" (status: ${finalStatus})`);
-  const item = db.prepare('SELECT * FROM items WHERE id = ?').get(info.lastInsertRowid);
+  await logHistory(info.lastInsertRowid, uid, 'created', `Added "${name}" (status: ${finalStatus})`);
+  const item = await db.get('SELECT * FROM items WHERE id = ?', [info.lastInsertRowid]);
   res.status(201).json({ item });
-});
+}));
 
 // Update item (tracks status/quantity changes in history)
-router.put('/:id', (req, res) => {
+router.put('/:id', asyncHandler(async (req, res) => {
   const uid = targetUserId(req);
-  const existing = db.prepare('SELECT * FROM items WHERE id = ? AND user_id = ?').get(req.params.id, uid);
+  const existing = await db.get('SELECT * FROM items WHERE id = ? AND user_id = ?', [req.params.id, uid]);
   if (!existing) return res.status(404).json({ error: 'Item not found' });
 
   const { name, category, status, quantity, price, notes } = req.body || {};
@@ -93,57 +106,42 @@ router.put('/:id', (req, res) => {
     notes: notes ?? existing.notes,
   };
 
-  db.prepare(
+  await db.run(
     `UPDATE items SET name=?, category=?, status=?, quantity=?, price=?, notes=?, updated_at=datetime('now')
-     WHERE id=?`
-  ).run(updated.name, updated.category, updated.status, updated.quantity, updated.price, updated.notes, existing.id);
+     WHERE id=?`,
+    [updated.name, updated.category, updated.status, updated.quantity, updated.price, updated.notes, existing.id]
+  );
 
   if (status && status !== existing.status) {
-    logHistory(existing.id, uid, 'status_changed', `${existing.status} -> ${status}`);
+    await logHistory(existing.id, uid, 'status_changed', `${existing.status} -> ${status}`);
   }
-  if (quantity !== undefined && quantity !== existing.quantity) {
-    logHistory(existing.id, uid, 'quantity_changed', `${existing.quantity} -> ${quantity}`);
+  if (quantity !== undefined && Number(quantity) !== Number(existing.quantity)) {
+    await logHistory(existing.id, uid, 'quantity_changed', `${existing.quantity} -> ${quantity}`);
   }
 
-  const item = db.prepare('SELECT * FROM items WHERE id = ?').get(existing.id);
+  const item = await db.get('SELECT * FROM items WHERE id = ?', [existing.id]);
   res.json({ item });
-});
+}));
 
 // Delete item (logs removal before deleting)
-router.delete('/:id', (req, res) => {
+router.delete('/:id', asyncHandler(async (req, res) => {
   const uid = targetUserId(req);
-  const existing = db.prepare('SELECT * FROM items WHERE id = ? AND user_id = ?').get(req.params.id, uid);
+  const existing = await db.get('SELECT * FROM items WHERE id = ? AND user_id = ?', [req.params.id, uid]);
   if (!existing) return res.status(404).json({ error: 'Item not found' });
 
-  logHistory(existing.id, uid, 'deleted', `Removed "${existing.name}"`);
-  db.prepare('DELETE FROM items WHERE id = ?').run(existing.id);
+  await logHistory(existing.id, uid, 'deleted', `Removed "${existing.name}"`);
+  await db.run('DELETE FROM items WHERE id = ?', [existing.id]);
   res.json({ ok: true });
-});
+}));
 
 // Get history for one item
-router.get('/:id/history', (req, res) => {
+router.get('/:id/history', asyncHandler(async (req, res) => {
   const uid = targetUserId(req);
-  const item = db.prepare('SELECT * FROM items WHERE id = ? AND user_id = ?').get(req.params.id, uid);
+  const item = await db.get('SELECT * FROM items WHERE id = ? AND user_id = ?', [req.params.id, uid]);
   if (!item) return res.status(404).json({ error: 'Item not found' });
 
-  const history = db
-    .prepare('SELECT * FROM item_history WHERE item_id = ? ORDER BY created_at DESC')
-    .all(req.params.id);
+  const history = await db.all('SELECT * FROM item_history WHERE item_id = ? ORDER BY created_at DESC', [req.params.id]);
   res.json({ history });
-});
-
-// Get full history for the target inventory
-router.get('/history/all', (req, res) => {
-  const uid = targetUserId(req);
-  const history = db
-    .prepare(
-      `SELECT item_history.*, items.name as item_name
-       FROM item_history JOIN items ON items.id = item_history.item_id
-       WHERE item_history.user_id = ?
-       ORDER BY item_history.created_at DESC`
-    )
-    .all(uid);
-  res.json({ history });
-});
+}));
 
 module.exports = router;
