@@ -7,10 +7,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     autoDeploy: true
-    disk:
-      name: cricket-inventory-data
-      mountPath: /opt/render/project/src/backend
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 4000
