@@ -4,6 +4,13 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+const { ensureSchema } = require('./db/schema');
+const { ensureAdmin } = require('./db/ensure-admin');
+
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
+const itemRoutes = require('./routes/items');
+
 // Refuse to start with a missing or obviously weak JWT secret — a weak secret
 // lets anyone forge login tokens for any account, including admin.
 const WEAK_SECRETS = ['change-this-to-a-long-random-string', 'secret', 'test-secret-key-12345', ''];
@@ -14,12 +21,6 @@ if (!process.env.JWT_SECRET || WEAK_SECRETS.includes(process.env.JWT_SECRET) || 
   );
   process.exit(1);
 }
-
-require('./db/ensure-admin'); // idempotent: creates the admin user on first boot if missing
-
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const itemRoutes = require('./routes/items');
 
 const app = express();
 
@@ -43,13 +44,23 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/items', itemRoutes);
 
-// Generic error handler
+// Generic error handler (must be defined after routes)
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Server error' });
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Cricket Inventory API running on port ${PORT}`);
+
+async function start() {
+  await ensureSchema();
+  await ensureAdmin();
+  app.listen(PORT, () => {
+    console.log(`Cricket Inventory API running on port ${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('[startup] Failed to start server:', err);
+  process.exit(1);
 });
