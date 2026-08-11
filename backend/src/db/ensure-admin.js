@@ -4,22 +4,27 @@
 const bcrypt = require('bcryptjs');
 const db = require('./index');
 
-const username = process.env.ADMIN_USERNAME || 'admin';
-const password = process.env.ADMIN_PASSWORD || 'admin123';
+async function ensureAdmin() {
+  const username = process.env.ADMIN_USERNAME || 'admin';
+  const password = process.env.ADMIN_PASSWORD || 'admin123';
 
-if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === 'admin123') {
-  console.warn(
-    '[startup] WARNING: ADMIN_PASSWORD is unset or using the default "admin123". ' +
-    'Set a strong ADMIN_PASSWORD in your environment before exposing this app publicly.'
-  );
+  if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === 'admin123') {
+    console.warn(
+      '[startup] WARNING: ADMIN_PASSWORD is unset or using the default "admin123". ' +
+      'Set a strong ADMIN_PASSWORD in your environment before exposing this app publicly.'
+    );
+  }
+
+  const existing = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+
+  if (!existing) {
+    const hash = bcrypt.hashSync(password, 10);
+    await db.run(
+      'INSERT INTO users (username, password_hash, role, display_name) VALUES (?, ?, ?, ?)',
+      [username, hash, 'admin', 'Administrator']
+    );
+    console.log(`[startup] Created admin user "${username}". Log in and change the password if this was auto-generated.`);
+  }
 }
 
-const existing = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-
-if (!existing) {
-  const hash = bcrypt.hashSync(password, 10);
-  db.prepare(
-    'INSERT INTO users (username, password_hash, role, display_name) VALUES (?, ?, ?, ?)'
-  ).run(username, hash, 'admin', 'Administrator');
-  console.log(`[startup] Created admin user "${username}". Log in and change the password if this was auto-generated.`);
-}
+module.exports = { ensureAdmin };

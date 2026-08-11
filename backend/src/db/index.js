@@ -1,44 +1,33 @@
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '..', '..', 'data.sqlite');
-const db = new Database(dbPath);
+// TURSO_DATABASE_URL + TURSO_AUTH_TOKEN connect to a hosted Turso database (production).
+// If unset, falls back to a local SQLite file so local dev needs zero setup.
+const url = process.env.TURSO_DATABASE_URL || `file:${path.join(__dirname, '..', '..', 'data.sqlite')}`;
+const authToken = process.env.TURSO_AUTH_TOKEN; // not needed for local file mode
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const client = createClient(authToken ? { url, authToken } : { url });
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin','user')) DEFAULT 'user',
-  display_name TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  active INTEGER NOT NULL DEFAULT 1
-);
+// Thin helpers so route files read almost like the old better-sqlite3 API,
+// just with awaits (network calls are async, unlike a local file).
+async function get(sql, args = []) {
+  const res = await client.execute({ sql, args });
+  return res.rows[0] || undefined;
+}
 
-CREATE TABLE IF NOT EXISTS items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  category TEXT,
-  status TEXT NOT NULL CHECK (status IN ('have','had','want_to_buy')) DEFAULT 'have',
-  quantity INTEGER NOT NULL DEFAULT 1,
-  price REAL,
-  notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+async function all(sql, args = []) {
+  const res = await client.execute({ sql, args });
+  return res.rows;
+}
 
-CREATE TABLE IF NOT EXISTS item_history (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  action TEXT NOT NULL,
-  details TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`);
+async function run(sql, args = []) {
+  const res = await client.execute({ sql, args });
+  return { lastInsertRowid: Number(res.lastInsertRowid), changes: res.rowsAffected };
+}
 
-module.exports = db;
+async function exec(sql) {
+  // For multi-statement schema setup
+  await client.executeMultiple(sql);
+}
+
+module.exports = { client, get, all, run, exec };
