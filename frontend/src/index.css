@@ -1,0 +1,188 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+:root {
+  --pitch-900: #16241c;
+  --pitch-700: #274d38;
+  --pitch-500: #3c7350;
+  --pitch-300: #8fb89e;
+  --cream: #f6f4ed;
+  --paper: #fffdf8;
+  --seam: #a4402c;
+  --seam-dark: #7e2f1f;
+  --willow: #c9a768;
+  --ink: #1d221e;
+  --ink-soft: #4d564f;
+  --line: #dedad0;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --radius: 10px;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  margin: 0;
+  color: var(--pitch-900);
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: var(--font-body);
+}
+
+a {
+  color: var(--pitch-700);
+}
+
+/* Seam divider — signature motif, echoes cricket-ball stitching */
+.seam-divider {
+  height: 10px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--seam) 0px,
+    var(--seam) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  opacity: 0.55;
+  border-radius: 4px;
+  margin: 0 0 1.5rem 0;
+}
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--pitch-700);
+  color: var(--paper);
+}
+.btn-primary:hover {
+  background: var(--pitch-900);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--pitch-700);
+  border: 1.5px solid var(--pitch-300);
+}
+.btn-secondary:hover {
+  background: rgba(60, 115, 80, 0.08);
+}
+.btn-danger {
+  background: transparent;
+  color: var(--seam-dark);
+  border: 1.5px solid var(--seam);
+}
+.btn-danger:hover {
+  background: rgba(164, 64, 44, 0.08);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+.field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.field input, .field select, .field textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1.5px solid var(--line);
+  border-radius: 7px;
+  font-size: 0.95rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: 2px solid var(--pitch-500);
+  outline-offset: 1px;
+  border-color: var(--pitch-500);
+}
+
+.error-banner {
+  background: #fbeae7;
+  color: var(--seam-dark);
+  border: 1px solid var(--seam);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge-have {
+  background: rgba(60, 115, 80, 0.15);
+  color: var(--pitch-700);
+}
+.badge-had {
+  background: rgba(77, 86, 79, 0.12);
+  color: var(--ink-soft);
+}
+.badge-want {
+  background: rgba(201, 167, 104, 0.25);
+  color: #8a6c2f;
+}
+
+::selection {
+  background: var(--willow);
+  color: var(--pitch-900);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
